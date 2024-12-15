@@ -18,7 +18,7 @@
  */
 #define PAGE_TABLE_SIZE (0x5000)
 #define MAX_KERNEL_SIZE (PS_LIMIT - PAGE_TABLE_SIZE - KERNEL_STACK_SIZE)
-#define MEM_SIZE (PS_LIMIT * 0x2)
+#define MEM_SIZE (PS_LIMIT * 0x2) // size of memory for guest
 
 void read_file(const char *filename, uint8_t** content_ptr, size_t* size_ptr) {
   FILE *f = fopen(filename, "rb");
@@ -56,6 +56,21 @@ void setup_regs(VM *vm, size_t entry) {
   if(ioctl(vm->vcpufd, KVM_SET_REGS, &regs) < 0) pexit("ioctl(KVM_SET_REGS");
 }
 
+
+/*
+## 64-bit World
+To execute 64-bit assembled code, we need to set vCPU into long mode. And this wiki page describes how 
+to switch from real mode to long mode, I highly recommend you read it as well. The most complicated part 
+of switching into long mode is to set up the page tables for mapping virtual address into physical address. 
+x86-64 processor uses a memory management feature named PAE (Physical Address Extension), contains 
+four kinds of tables: PML4T, PDPT, PDT, and PT. The way these tables work is that each entry in the PML4T 
+points to a PDPT, each entry in a PDPT to a PDT and each entry in a PDT to a PT. Each entry in a PT then 
+points to the physical address.
+
+The control registers (cr*) are used for setting paging attributes. For 
+example, cr3 should point to physical address of pml4. More information about control registers 
+can be found in wikipedia. This code set up the tables, using the 2M paging.
+*/
 /* Maps:
  * 0 ~ 0x200000 -> 0 ~ 0x200000 with kernel privilege
  */
@@ -79,7 +94,7 @@ void setup_paging(VM *vm) {
   sregs.cr4 = CR4_PAE;
   sregs.cr4 |= CR4_OSFXSR | CR4_OSXMMEXCPT; /* enable SSE instruction */
   sregs.cr0 = CR0_PE | CR0_MP | CR0_ET | CR0_NE | CR0_WP | CR0_AM | CR0_PG;
-  sregs.efer = EFER_LME | EFER_LMA;
+  sregs.efer = EFER_LME | EFER_LMA; /*long mode enable, long mode active*/
   sregs.efer |= EFER_SCE; /* enable syscall instruction */
 
   if(ioctl(vm->vcpufd, KVM_SET_SREGS, &sregs) < 0) pexit("ioctl(KVM_SET_SREGS)");
@@ -94,7 +109,7 @@ void setup_seg_regs(VM *vm) {
     .selector = 1 << 3,
     .present = 1,
     .type = 0xb, /* Code segment */
-    .dpl = 0, /* Kernel: level 0 */
+    .dpl = 0, /* Kernel: level 0, 3 for user mode */
     .db = 0,
     .s = 1,
     .l = 1, /* long mode */
@@ -118,6 +133,10 @@ void setup_long_mode(VM *vm) {
   setup_seg_regs(vm);
 }
 
+/*
+create vm and set up memory region
+create and set up vCPU
+*/
 VM* kvm_init(uint8_t code[], size_t len) {
   int kvmfd = open("/dev/kvm", O_RDWR | O_CLOEXEC);
   if(kvmfd < 0) pexit("open(/dev/kvm)");

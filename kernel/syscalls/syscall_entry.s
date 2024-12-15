@@ -5,6 +5,10 @@
 kernel_stack: .quad 0
 user_stack: .quad 0
 
+/*
+Notice that we have to properly push-and-pop not callee-saved registers. 
+The syscall/sysret will not modify the stack pointer rsp, so we have to handle it manually.
+*/
 syscall_entry:
   mov [rip + user_stack], rsp
   mov rsp, [rip + kernel_stack]

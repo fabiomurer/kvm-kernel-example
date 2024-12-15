@@ -9,6 +9,16 @@
 #define MSR_CSTAR 0xc0000083 /* compat mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084
 
+/*
+The mask 0x3f7fd5 is important, when syscall instruction is invoked, CPU will do:
+
+rcx = rip;
+r11 = rflags;
+rflags &= ~SYSCALL_MASK;
+
+If the mask is not set properly, kernel will inherit the rflags set 
+in user mode, which can cause severe security issues.
+*/
 int register_syscall() {
   asm(
     "xor rax, rax;"
