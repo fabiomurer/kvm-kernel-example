@@ -11,6 +11,9 @@ debug:
 test: all
 	hypervisor/hypervisor.elf kernel/kernel.bin user/orw.elf /etc/os-release
 
+clangd_config:
+	bear -- make
+
 clean:
 	echo $(DIRS) | xargs -n 1 $(MAKE) clean -C
 FORCE:

@@ -3,3 +3,6 @@
 *.a
 *.elf
 *.bin
+
+compile_commands.json
+.cache/*
